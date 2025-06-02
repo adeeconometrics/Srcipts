@@ -8,26 +8,29 @@ import numpy as np
 
 
 def validate_dir(t_path: Path) -> Path:
+    """Check if the output directory exists"""
     if not Path(Path(t_path).parent).exists():
-        raise ArgumentError('Output directory does not exist')
+        raise ArgumentError(message='Output directory does not exist')
     return t_path
 
 def validate_path(path: Path) -> Path:
+    """Check if the input path exists"""
     if not Path(path).exists():
-        raise ArgumentError('Input path does not exist')
+        raise ArgumentError(message='Input path does not exist')
     return path
 
 
 def vid2gif(t_path: Path, 
             t_outpath: Path, 
             fps: int = 10, 
-            t_quality: int = 50, 
-            resize: tuple = (320, 240)) -> Path:
+            t_quality: int = 20, 
+            resize: tuple = (1080,1080)) -> Path:
+    """Convert a video to a GIF"""
     vid = iio.get_reader(t_path)
 
     frames = []
     for i, frame in enumerate(vid):
-        if i % fps == 0:
+        if i % (fps*1) == 0:
             img = Image.fromarray(frame).resize(resize)
             img_byte_arr = BytesIO()
             img.save(img_byte_arr, format='JPEG',
@@ -36,7 +39,7 @@ def vid2gif(t_path: Path,
             frame = np.array(Image.open(img_byte_arr))
             frames.append(frame)
 
-    iio.mimsave(t_outpath, frames, fps=fps)
+    iio.mimsave(t_outpath, frames, fps=fps, format='GIF')
 
     return t_outpath
 
