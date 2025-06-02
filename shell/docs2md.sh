@@ -13,9 +13,9 @@ mkdir -p "$OUTPUT_DIR"
 find "$INPUT_DIR" -type f \( -iname "*.doc" -o -iname "*.docs" -o -iname "*.docx" \) | while read -r file; do
   filename=$(basename "$file")
   stem="${filename%.*}"
-  pandoc "$file" -o "$OUTPUT_DIR/$stem.pdf"
+  pandoc "$file" -o "$OUTPUT_DIR/$stem.md"
   if [[ $? -eq 0 ]]; then
-    echo "Converted: $file -> $OUTPUT_DIR/$stem.pdf"
+    echo "Converted: $file -> $OUTPUT_DIR/$stem.md"
   else
     echo "Failed to convert: $file"
   fi
