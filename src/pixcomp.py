@@ -20,29 +20,37 @@ def find_path(dir: Path, extension: Union[str, list[str], tuple[str, ...]] = 'jp
     return files
 
 
-def compress(dir: Path, outdir: Path, method: str = 'jpeg', quality: int = 75) -> None:
+def batch_compress(files: list[Path], outdir: Union[Path, str], extension: str = 'jpeg', quality: int = 75) -> None:
     """
-    Compress all images in `dir` and save to `outdir` using the specified method.
+    Compress a batch of image files and save to `outdir` using the specified extension and quality.
     """
+    outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
-    image_exts = ('jpg', 'jpeg', 'png', 'bmp', 'tiff', 'webp')
-    files = find_path(dir, image_exts)
     for file in files:
         try:
             img = Image.open(file)
-            out_file = outdir / file.with_suffix(f'.{method.lower()}').name
-            if method.lower() in ('jpg', 'jpeg'):
+            out_file = outdir / file.with_suffix(f'.{extension.lower()}').name
+            if extension.lower() in ('jpg', 'jpeg'):
                 img = img.convert('RGB')
                 img.save(out_file, 'JPEG', quality=quality, optimize=True)
-            elif method.lower() == 'webp':
+            elif extension.lower() == 'webp':
                 img.save(out_file, 'WEBP', quality=quality, method=6)
-            elif method.lower() == 'png':
+            elif extension.lower() == 'png':
                 img.save(out_file, 'PNG', optimize=True)
             else:
-                img.save(out_file, method.upper())
+                img.save(out_file, extension.upper())
             print(f"Compressed: {file} -> {out_file}")
         except Exception as e:
             print(f"Failed to compress {file}: {e}")
+
+
+def compress(dir: Path, outdir: Path, method: str = 'jpeg', quality: int = 75) -> None:
+    """
+    Find images in `dir` and compress them to `outdir` using the specified method and quality.
+    """
+    image_exts = ('jpg', 'jpeg', 'png', 'bmp', 'tiff', 'webp')
+    files = find_path(dir, image_exts)
+    batch_compress(files, outdir, method, quality)
 
 
 def main():
