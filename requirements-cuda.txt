@@ -1,0 +1,11 @@
+# CUDA-accelerated image compression requirements
+numpy>=1.21.0
+pillow>=8.0.0
+cupy-cuda11x>=9.0.0  # For CUDA 11.x, adjust version based on your CUDA version
+# cupy-cuda12x>=12.0.0  # For CUDA 12.x, uncomment if using CUDA 12
+
+# nvcomp Python bindings - may need to install separately
+# pip install nvcomp-python
+
+# Alternative compression libraries that work with CUDA
+numba>=0.56.0
