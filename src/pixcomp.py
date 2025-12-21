@@ -50,7 +50,7 @@ def compress(dir: Path, outdir: Path, method: str = 'jpeg', quality: int = 75) -
     """
     image_exts = ('jpg', 'jpeg', 'png', 'bmp', 'tiff', 'webp')
     files = find_path(dir, image_exts)
-    batch_compress(files, outdir, method, quality)
+    batch_compress(files[:100], outdir, method, quality)
 
 
 def main():
