@@ -3,12 +3,18 @@ name = "srcipts"
 version = "0.1.0"
 description = "Self-contained Python automation scripts with modular dependency management"
 readme = "README.md"
-requires-python = ">=3.13"
-dependencies = []
+requires-python = ">=3.11"
+dependencies = [
+    "pillow>=10.3.0",
+    "exif>=1.6.1",
+]
 
 [project.optional-dependencies]
-# Image compression using PIL
-pixcomp = ["pillow>=10.3.0"]
+# Image compression using PIL with HEIC support
+pixcomp = [
+    "pillow-heif>=0.18.0",
+    "tabulate>=0.9.0",
+]
 
 # CUDA-accelerated image compression
 cupixcomp = [
@@ -42,6 +48,7 @@ dev = [
     "black>=23.0.0",
     "ruff>=0.1.0",
     "mypy>=1.0.0",
+    "exif",
 ]
 
 # All optional dependencies
@@ -60,6 +67,7 @@ all = [
     "black>=23.0.0",
     "ruff>=0.1.0",
     "mypy>=1.0.0",
+    "exif",
 ]
 
 [project.scripts]
