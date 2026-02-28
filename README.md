@@ -177,6 +177,7 @@ Convert `.mov` files to a compressed `.mp4` or `.gif` with footprint-first defau
 **Usage**:
 ```bash
 srcipts movcomp -input /path/to/video.mov --format {mp4|gif} [-output /path/to/output.ext]
+srcipts movcomp -inputs /path/to/a.mov /path/to/b.mov --format {mp4|gif}
 ```
 
 **Examples**:
@@ -189,11 +190,16 @@ srcipts movcomp -input ./clip.mov --format gif --fps 10 --gif-colors 48
 
 # Explicit output name/path
 srcipts movcomp -input ./clip.mov --format mp4 -output ./clip-small.mp4
+
+# Batch mode (output names are auto-transformed; -output is disabled)
+srcipts movcomp -inputs "./Sample Title X.mov" ./clip.mov --format mp4
 ```
 
 **Behavior**:
 - One output per run (`--format mp4` or `--format gif`)
 - Default output naming: `<NormalizedBase>Compressed.<ext>`
+- Batch mode (`-inputs`) always uses default transformed output names per file
+- `-output` is only valid with single-file mode (`-input`)
 - Resolution cap: up to 1280x720 while preserving aspect ratio
 - Lowered FPS and strong compression defaults to minimize file size
 

@@ -134,8 +134,15 @@ def parse_args() -> ArgumentParser:
     parser = ArgumentParser(
         description="Convert MOV files to compressed MP4 or GIF using ffmpeg"
     )
-    parser.add_argument(
-        "-input", required=True, type=validate_input, help="Path to input .mov"
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument(
+        "-input", type=validate_input, help="Path to one input .mov"
+    )
+    input_group.add_argument(
+        "-inputs",
+        nargs="+",
+        type=validate_input,
+        help="List of input .mov files (batch mode)",
     )
     parser.add_argument(
         "--format",
@@ -204,32 +211,42 @@ def main() -> int:
         if not 2 <= args.gif_colors <= 256:
             raise ValueError("--gif-colors must be between 2 and 256")
 
-        output_path = resolve_output_path(args.input, args.output, args.format)
-        if output_path.exists() and not args.overwrite:
-            raise ValueError(
-                f"Output already exists: {output_path}. Use --overwrite to replace it."
-            )
+        input_paths = args.inputs if args.inputs else [args.input]
 
-        if args.format == "mp4":
-            compress_to_mp4(
-                args.input,
-                output_path,
-                fps=args.fps,
-                crf=args.crf,
-                preset=args.preset,
-                keep_audio=args.keep_audio,
-                overwrite=args.overwrite,
-            )
-        else:
-            compress_to_gif(
-                args.input,
-                output_path,
-                fps=args.fps,
-                gif_colors=args.gif_colors,
-                overwrite=args.overwrite,
-            )
+        if args.inputs and args.output:
+            raise ValueError("-output cannot be used with -inputs batch mode")
 
-        print(f"Created: {output_path}")
+        for input_path in input_paths:
+            # In batch mode, outputs always use the default transformed filename.
+            requested_output = None if args.inputs else args.output
+            output_path = resolve_output_path(input_path, requested_output, args.format)
+
+            if output_path.exists() and not args.overwrite:
+                raise ValueError(
+                    f"Output already exists: {output_path}. Use --overwrite to replace it."
+                )
+
+            if args.format == "mp4":
+                compress_to_mp4(
+                    input_path,
+                    output_path,
+                    fps=args.fps,
+                    crf=args.crf,
+                    preset=args.preset,
+                    keep_audio=args.keep_audio,
+                    overwrite=args.overwrite,
+                )
+            else:
+                compress_to_gif(
+                    input_path,
+                    output_path,
+                    fps=args.fps,
+                    gif_colors=args.gif_colors,
+                    overwrite=args.overwrite,
+                )
+
+            print(f"Created: {output_path}")
+
         return 0
     except (ValueError, RuntimeError, OSError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
