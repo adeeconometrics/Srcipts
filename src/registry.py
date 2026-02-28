@@ -12,6 +12,7 @@ from typing import List
 @dataclass
 class ScriptConfig:
     """Configuration for a script."""
+
     name: str
     module: str
     description: str
@@ -41,6 +42,13 @@ SCRIPTS = {
         description="Convert video files to animated GIFs",
         extras=["vid2gif"],
         example="srcipts vid2gif -input video.mp4 -output output.gif",
+    ),
+    "movcomp": ScriptConfig(
+        name="movcomp",
+        module="movcomp",
+        description="Convert MOV files to compressed MP4 or GIF via ffmpeg",
+        extras=[],
+        example="srcipts movcomp -input video.mov --format mp4",
     ),
     "pdf2xls": ScriptConfig(
         name="pdf2xls",

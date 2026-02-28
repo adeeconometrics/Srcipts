@@ -2,3 +2,4 @@ venv/
 data/
 .github/
 .mypy_cache/
+__pycache__/

@@ -168,6 +168,37 @@ srcipts vid2gif -input ~/Videos/animation.mp4 -output animation.gif
 
 ---
 
+### 🎞️ `movcomp` - MOV to Compressed MP4/GIF (ffmpeg Wrapper)
+
+Convert `.mov` files to a compressed `.mp4` or `.gif` with footprint-first defaults.
+
+**Dependencies**: host-installed `ffmpeg`
+
+**Usage**:
+```bash
+srcipts movcomp -input /path/to/video.mov --format {mp4|gif} [-output /path/to/output.ext]
+```
+
+**Examples**:
+```bash
+# Default name from input: SampleTitleXCompressed.mp4
+srcipts movcomp -input "./Sample Title X.mov" --format mp4
+
+# Generate GIF with stronger frame/color reduction
+srcipts movcomp -input ./clip.mov --format gif --fps 10 --gif-colors 48
+
+# Explicit output name/path
+srcipts movcomp -input ./clip.mov --format mp4 -output ./clip-small.mp4
+```
+
+**Behavior**:
+- One output per run (`--format mp4` or `--format gif`)
+- Default output naming: `<NormalizedBase>Compressed.<ext>`
+- Resolution cap: up to 1280x720 while preserving aspect ratio
+- Lowered FPS and strong compression defaults to minimize file size
+
+---
+
 ### 📄 `pdf2xls` - PDF Document Processor
 
 Convert PDF tables to Excel sheets or Markdown format.
