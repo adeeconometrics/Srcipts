@@ -59,6 +59,33 @@ def run_ffmpeg(command: list[str]) -> None:
         )
 
 
+def format_bytes(num_bytes: int) -> str:
+    """Format bytes in a human-readable unit."""
+    units = ["B", "KB", "MB", "GB", "TB"]
+    value = float(num_bytes)
+    for unit in units:
+        if value < 1024.0 or unit == units[-1]:
+            return f"{value:.2f} {unit}"
+        value /= 1024.0
+    return f"{value:.2f} TB"
+
+
+def print_conversion_summary(input_path: Path, output_path: Path) -> None:
+    """Display input/output files with size and reduction details."""
+    raw_size = input_path.stat().st_size
+    compressed_size = output_path.stat().st_size
+    reduction = raw_size - compressed_size
+    reduction_pct = (reduction / raw_size * 100.0) if raw_size > 0 else 0.0
+
+    print(f"Raw:        {input_path} ({format_bytes(raw_size)})")
+    print(f"Compressed: {output_path} ({format_bytes(compressed_size)})")
+    print(
+        "Saved:      "
+        f"{format_bytes(abs(reduction))} "
+        f"({'-' if reduction < 0 else ''}{abs(reduction_pct):.2f}%)"
+    )
+
+
 def compress_to_mp4(
     input_path: Path,
     output_path: Path,
@@ -246,6 +273,8 @@ def main() -> int:
                 )
 
             print(f"Created: {output_path}")
+            print_conversion_summary(input_path, output_path)
+            print()
 
         return 0
     except (ValueError, RuntimeError, OSError) as exc:
