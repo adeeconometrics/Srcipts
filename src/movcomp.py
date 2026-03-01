@@ -8,13 +8,18 @@ from argparse import ArgumentParser, ArgumentTypeError
 from pathlib import Path
 
 
+SUPPORTED_INPUT_EXTENSIONS = (".mov", ".mkv")
+
+
 def validate_input(path_raw: str) -> Path:
-    """Validate input path and enforce MOV source files."""
+    """Validate input path and enforce supported source file types."""
     path = Path(path_raw)
     if not path.exists() or not path.is_file():
         raise ArgumentTypeError(f"Input file does not exist: {path}")
-    if path.suffix.lower() != ".mov":
-        raise ArgumentTypeError("Input must be a .mov file")
+    if path.suffix.lower() not in SUPPORTED_INPUT_EXTENSIONS:
+        raise ArgumentTypeError(
+            "Input must be one of: " + ", ".join(SUPPORTED_INPUT_EXTENSIONS)
+        )
     return path
 
 
@@ -95,7 +100,7 @@ def compress_to_mp4(
     keep_audio: bool,
     overwrite: bool,
 ) -> None:
-    """Compress MOV to MP4 with size-first defaults."""
+    """Compress input video to MP4 with size-first defaults."""
     cmd = ["ffmpeg"]
     cmd.append("-y" if overwrite else "-n")
     cmd.extend(["-i", str(input_path)])
@@ -122,7 +127,7 @@ def compress_to_gif(
     gif_colors: int,
     overwrite: bool,
 ) -> None:
-    """Compress MOV to GIF using palette generation for better compression."""
+    """Compress input video to GIF using palette generation for better compression."""
     with tempfile.NamedTemporaryFile(suffix=".png", delete=True) as tmp_palette:
         palette_path = Path(tmp_palette.name)
 
@@ -159,17 +164,17 @@ def compress_to_gif(
 
 def parse_args() -> ArgumentParser:
     parser = ArgumentParser(
-        description="Convert MOV files to compressed MP4 or GIF using ffmpeg"
+        description="Convert MOV/MKV files to compressed MP4 or GIF using ffmpeg"
     )
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument(
-        "-input", type=validate_input, help="Path to one input .mov"
+        "-input", type=validate_input, help="Path to one input .mov or .mkv"
     )
     input_group.add_argument(
         "-inputs",
         nargs="+",
         type=validate_input,
-        help="List of input .mov files (batch mode)",
+        help="List of input .mov/.mkv files (batch mode)",
     )
     parser.add_argument(
         "--format",
