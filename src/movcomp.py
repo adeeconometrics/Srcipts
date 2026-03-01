@@ -91,6 +91,24 @@ def print_conversion_summary(input_path: Path, output_path: Path) -> None:
     )
 
 
+def print_batch_summary(
+    total_raw_size: int, total_compressed_size: int, files_count: int
+) -> None:
+    """Display aggregate totals after a batch conversion run."""
+    reduction = total_raw_size - total_compressed_size
+    reduction_pct = (reduction / total_raw_size * 100.0) if total_raw_size > 0 else 0.0
+
+    print("Batch summary")
+    print(f"Files:       {files_count}")
+    print(f"Raw total:   {format_bytes(total_raw_size)}")
+    print(f"Output total:{format_bytes(total_compressed_size)}")
+    print(
+        "Saved total: "
+        f"{format_bytes(abs(reduction))} "
+        f"({'-' if reduction < 0 else ''}{abs(reduction_pct):.2f}%)"
+    )
+
+
 def compress_to_mp4(
     input_path: Path,
     output_path: Path,
@@ -101,18 +119,37 @@ def compress_to_mp4(
     overwrite: bool,
 ) -> None:
     """Compress input video to MP4 with size-first defaults."""
+    # libx264 with yuv420p requires even frame dimensions.
+    video_filter = (
+        f"fps={fps},"
+        "scale=1280:720:force_original_aspect_ratio=decrease,"
+        "scale=trunc(iw/2)*2:trunc(ih/2)*2"
+    )
+
     cmd = ["ffmpeg"]
     cmd.append("-y" if overwrite else "-n")
     cmd.extend(["-i", str(input_path)])
-    cmd.extend(
-        ["-vf", f"fps={fps},scale=1280:720:force_original_aspect_ratio=decrease"]
-    )
+    cmd.extend(["-map", "0:v:0", "-map", "0:a:0?"])
+    cmd.extend(["-vf", video_filter])
     cmd.extend(
         ["-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p"]
     )
 
     if keep_audio:
-        cmd.extend(["-c:a", "aac", "-b:a", "64k"])
+        cmd.extend(
+            [
+                "-c:a",
+                "aac",
+                "-b:a",
+                "96k",
+                "-ar",
+                "48000",
+                "-ac",
+                "2",
+                "-af",
+                "aresample=async=1:first_pts=0",
+            ]
+        )
     else:
         cmd.append("-an")
 
@@ -188,6 +225,11 @@ def parse_args() -> ArgumentParser:
         help="Optional output path; defaults to <NormalizedBase>Compressed.<ext>",
     )
     parser.add_argument(
+        "--output-dir",
+        required=False,
+        help="Optional output directory for generated files (useful in batch mode)",
+    )
+    parser.add_argument(
         "--fps", type=int, default=12, help="Target output FPS (default: 12)"
     )
     parser.add_argument(
@@ -220,9 +262,17 @@ def parse_args() -> ArgumentParser:
     )
     parser.add_argument(
         "--keep-audio",
+        dest="keep_audio",
         action="store_true",
-        help="Keep audio in mp4 output (disabled by default for smaller files)",
+        help="Keep audio in mp4 output (default)",
     )
+    parser.add_argument(
+        "--no-audio",
+        dest="keep_audio",
+        action="store_false",
+        help="Disable audio in mp4 output for smaller files",
+    )
+    parser.set_defaults(keep_audio=True)
     parser.add_argument(
         "--overwrite",
         action="store_true",
@@ -245,18 +295,37 @@ def main() -> int:
 
         input_paths = args.inputs if args.inputs else [args.input]
 
+        if args.output and args.output_dir:
+            raise ValueError("Use either -output or --output-dir, not both")
         if args.inputs and args.output:
             raise ValueError("-output cannot be used with -inputs batch mode")
 
+        output_dir: Path | None = None
+        if args.output_dir:
+            output_dir = Path(args.output_dir)
+            if not output_dir.exists() or not output_dir.is_dir():
+                raise ValueError(f"Output directory does not exist: {output_dir}")
+
+        total_raw_size = 0
+        total_compressed_size = 0
+
         for input_path in input_paths:
-            # In batch mode, outputs always use the default transformed filename.
+            # In batch mode, outputs use either --output-dir or per-input default location.
             requested_output = None if args.inputs else args.output
-            output_path = resolve_output_path(input_path, requested_output, args.format)
+            if output_dir is None:
+                output_path = resolve_output_path(
+                    input_path, requested_output, args.format
+                )
+            else:
+                default_stem = f"{normalize_stem(input_path.stem)}Compressed"
+                output_path = output_dir / f"{default_stem}.{args.format}"
 
             if output_path.exists() and not args.overwrite:
                 raise ValueError(
                     f"Output already exists: {output_path}. Use --overwrite to replace it."
                 )
+
+            raw_size = input_path.stat().st_size
 
             if args.format == "mp4":
                 compress_to_mp4(
@@ -279,6 +348,13 @@ def main() -> int:
 
             print(f"Created: {output_path}")
             print_conversion_summary(input_path, output_path)
+            print()
+
+            total_raw_size += raw_size
+            total_compressed_size += output_path.stat().st_size
+
+        if len(input_paths) > 1:
+            print_batch_summary(total_raw_size, total_compressed_size, len(input_paths))
             print()
 
         return 0
