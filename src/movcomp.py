@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import concurrent.futures
+from dataclasses import dataclass
 import re
 import subprocess
 import sys
@@ -9,6 +11,32 @@ from pathlib import Path
 
 
 SUPPORTED_INPUT_EXTENSIONS = (".mov", ".mkv")
+
+
+@dataclass(frozen=True)
+class ConversionTask:
+    """A single file conversion task definition."""
+
+    input_path: Path
+    output_path: Path
+    out_format: str
+    fps: int
+    crf: int
+    preset: str
+    gif_colors: int
+    keep_audio: bool
+    overwrite: bool
+
+
+@dataclass(frozen=True)
+class ConversionResult:
+    """Result payload for one conversion task."""
+
+    input_path: Path
+    output_path: Path
+    raw_size: int
+    compressed_size: int
+    error: str | None
 
 
 def validate_input(path_raw: str) -> Path:
@@ -92,7 +120,11 @@ def print_conversion_summary(input_path: Path, output_path: Path) -> None:
 
 
 def print_batch_summary(
-    total_raw_size: int, total_compressed_size: int, files_count: int
+    total_raw_size: int,
+    total_compressed_size: int,
+    files_count: int,
+    succeeded_count: int,
+    failed_count: int,
 ) -> None:
     """Display aggregate totals after a batch conversion run."""
     reduction = total_raw_size - total_compressed_size
@@ -100,6 +132,8 @@ def print_batch_summary(
 
     print("Batch summary")
     print(f"Files:       {files_count}")
+    print(f"Succeeded:   {succeeded_count}")
+    print(f"Failed:      {failed_count}")
     print(f"Raw total:   {format_bytes(total_raw_size)}")
     print(f"Output total:{format_bytes(total_compressed_size)}")
     print(
@@ -199,6 +233,47 @@ def compress_to_gif(
         run_ffmpeg(cmd_gif)
 
 
+def run_conversion_task(task: ConversionTask) -> ConversionResult:
+    """Execute one conversion task and capture success or error details."""
+    raw_size = task.input_path.stat().st_size
+    try:
+        if task.out_format == "mp4":
+            compress_to_mp4(
+                task.input_path,
+                task.output_path,
+                fps=task.fps,
+                crf=task.crf,
+                preset=task.preset,
+                keep_audio=task.keep_audio,
+                overwrite=task.overwrite,
+            )
+        else:
+            compress_to_gif(
+                task.input_path,
+                task.output_path,
+                fps=task.fps,
+                gif_colors=task.gif_colors,
+                overwrite=task.overwrite,
+            )
+    except (ValueError, RuntimeError, OSError) as exc:
+        return ConversionResult(
+            input_path=task.input_path,
+            output_path=task.output_path,
+            raw_size=raw_size,
+            compressed_size=0,
+            error=str(exc),
+        )
+
+    compressed_size = task.output_path.stat().st_size
+    return ConversionResult(
+        input_path=task.input_path,
+        output_path=task.output_path,
+        raw_size=raw_size,
+        compressed_size=compressed_size,
+        error=None,
+    )
+
+
 def parse_args() -> ArgumentParser:
     parser = ArgumentParser(
         description="Convert MOV/MKV files to compressed MP4 or GIF using ffmpeg"
@@ -278,6 +353,12 @@ def parse_args() -> ArgumentParser:
         action="store_true",
         help="Overwrite existing output file",
     )
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        help="Parallel worker processes for batch mode (default: 1)",
+    )
     return parser
 
 
@@ -292,6 +373,8 @@ def main() -> int:
             raise ValueError("--crf must be between 0 and 51")
         if not 2 <= args.gif_colors <= 256:
             raise ValueError("--gif-colors must be between 2 and 256")
+        if args.jobs < 1:
+            raise ValueError("--jobs must be >= 1")
 
         input_paths = args.inputs if args.inputs else [args.input]
 
@@ -306,8 +389,8 @@ def main() -> int:
             if not output_dir.exists() or not output_dir.is_dir():
                 raise ValueError(f"Output directory does not exist: {output_dir}")
 
-        total_raw_size = 0
-        total_compressed_size = 0
+        tasks: list[ConversionTask] = []
+        seen_outputs: set[Path] = set()
 
         for input_path in input_paths:
             # In batch mode, outputs use either --output-dir or per-input default location.
@@ -320,44 +403,75 @@ def main() -> int:
                 default_stem = f"{normalize_stem(input_path.stem)}Compressed"
                 output_path = output_dir / f"{default_stem}.{args.format}"
 
+            resolved_output = output_path.resolve()
+            if resolved_output in seen_outputs:
+                raise ValueError(f"Duplicate output path generated: {resolved_output}")
+            seen_outputs.add(resolved_output)
+
             if output_path.exists() and not args.overwrite:
                 raise ValueError(
                     f"Output already exists: {output_path}. Use --overwrite to replace it."
                 )
 
-            raw_size = input_path.stat().st_size
-
-            if args.format == "mp4":
-                compress_to_mp4(
-                    input_path,
-                    output_path,
+            tasks.append(
+                ConversionTask(
+                    input_path=input_path,
+                    output_path=output_path,
+                    out_format=args.format,
                     fps=args.fps,
                     crf=args.crf,
                     preset=args.preset,
+                    gif_colors=args.gif_colors,
                     keep_audio=args.keep_audio,
                     overwrite=args.overwrite,
                 )
-            else:
-                compress_to_gif(
-                    input_path,
-                    output_path,
-                    fps=args.fps,
-                    gif_colors=args.gif_colors,
-                    overwrite=args.overwrite,
+            )
+
+        should_parallelize = (
+            args.inputs is not None and args.jobs > 1 and len(tasks) > 1
+        )
+
+        results: list[ConversionResult]
+        if should_parallelize:
+            with concurrent.futures.ProcessPoolExecutor(
+                max_workers=args.jobs
+            ) as executor:
+                results = list(executor.map(run_conversion_task, tasks))
+        else:
+            results = [run_conversion_task(task) for task in tasks]
+
+        total_raw_size = 0
+        total_compressed_size = 0
+        failed_count = 0
+
+        for result in results:
+            if result.error is not None:
+                failed_count += 1
+                print(
+                    f"Error ({result.input_path.name}): {result.error}",
+                    file=sys.stderr,
                 )
+                continue
 
-            print(f"Created: {output_path}")
-            print_conversion_summary(input_path, output_path)
+            print(f"Created: {result.output_path}")
+            print_conversion_summary(result.input_path, result.output_path)
             print()
 
-            total_raw_size += raw_size
-            total_compressed_size += output_path.stat().st_size
+            total_raw_size += result.raw_size
+            total_compressed_size += result.compressed_size
 
-        if len(input_paths) > 1:
-            print_batch_summary(total_raw_size, total_compressed_size, len(input_paths))
+        if len(tasks) > 1:
+            succeeded_count = len(tasks) - failed_count
+            print_batch_summary(
+                total_raw_size,
+                total_compressed_size,
+                len(tasks),
+                succeeded_count,
+                failed_count,
+            )
             print()
 
-        return 0
+        return 0 if failed_count == 0 else 1
     except (ValueError, RuntimeError, OSError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
